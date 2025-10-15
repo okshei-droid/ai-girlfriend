@@ -1,8 +1,10 @@
-export default function Page() {
+import AuthGate from '@/components/AuthGate'
+import Chat from '@/components/Chat'
+
+export default async function ChatPage() {
   return (
-    <main style={{maxWidth: 600, margin: '40px auto', fontFamily: 'sans-serif'}}>
-      <h1>Chat test</h1>
-      <p>Om du ser denna sida fungerar /chat-routen ✅</p>
-    </main>
-  );
+    <AuthGate>
+      <Chat />
+    </AuthGate>
+  )
 }
