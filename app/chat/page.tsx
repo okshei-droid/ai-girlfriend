@@ -1,10 +1,8 @@
-import AuthGate from '@/components/AuthGate'
-import Chat from '@/components/Chat'
-
-export default async function ChatPage() {
+export default function Home() {
   return (
-    <AuthGate>
-      <Chat />
-    </AuthGate>
+    <main style={{maxWidth: 640, margin: '40px auto', fontFamily: 'sans-serif'}}>
+      <h1>AI Girlfriend — Online ✅</h1>
+      <p>Öppna <code>/login</code> för att testa inloggning.</p>
+    </main>
   )
 }
