@@ -1,18 +1,34 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabaseBrowser } from '@/lib/supabaseClient'
 
+export const dynamic = 'force-dynamic'
+
 export default function LoginPage() {
+  const router = useRouter()
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
+
+  // ✅ Om användaren redan är inloggad → hoppa direkt till /chat
+  useEffect(() => {
+    (async () => {
+      const supabase = supabaseBrowser()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) router.replace('/chat')
+    })()
+  }, [router])
 
   async function sendLink(e: React.FormEvent) {
     e.preventDefault()
     const supabase = supabaseBrowser()
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `https://ai-girlfriend-plum.vercel.app/chat` }
+      options: {
+        // Hård redirect till din live-domän + /chat
+        emailRedirectTo: 'https://ai-girlfriend-plum.vercel.app/chat',
+      },
     })
     if (error) alert(error.message)
     else setSent(true)
