@@ -12,7 +12,7 @@ export default function LoginPage() {
     const supabase = supabaseBrowser()
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${location.origin}/chat` }
+      options: { emailRedirectTo: `https://ai-girlfriend-plum.vercel.app/chat` }
     })
     if (error) alert(error.message)
     else setSent(true)
