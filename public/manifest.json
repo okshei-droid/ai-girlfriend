@@ -3,7 +3,9 @@
   "short_name": "Luna",
   "description": "A warm, romantic AI companion in your pocket.",
   "start_url": "/chat",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "fullscreen"],
   "background_color": "#ffffff",
   "theme_color": "#f6e7f1",
   "icons": [
