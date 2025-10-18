@@ -1,3 +1,5 @@
+import './globals.css'
+
 import CodeExchange from '@/components/CodeExchange'
 
 export const metadata = {
