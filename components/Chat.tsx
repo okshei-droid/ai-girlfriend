@@ -2,37 +2,42 @@
 import { useEffect, useRef, useState } from 'react'
 
 type Msg = { role: 'user' | 'assistant', content: string }
-
-const STORAGE_KEY = 'luna_chat_history_v1'
+const LSTORE_KEY = 'luna_chat_history_v1'
 
 export default function Chat() {
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [style, setStyle] = useState<'romance' | 'comfort' | 'flirty'>('romance')
-  const [convId, setConvId] = useState<string>()
+  const [convId, setConvId] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // === Läs historik vid start ===
+  // 1) Läs lokalt först (snabb återställning)
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY)
+      const saved = localStorage.getItem(LSTORE_KEY)
       if (saved) {
         const parsed = JSON.parse(saved) as Msg[]
         if (Array.isArray(parsed)) setMessages(parsed)
       }
-    } catch {
-      // Ignorera korrupt lagring
-      localStorage.removeItem(STORAGE_KEY)
-    }
+    } catch {}
   }, [])
 
-  // === Spara historik vid varje ändring ===
+  // 2) Läs molnhistorik (om inloggad) och skriv över lokalt om den finns
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages))
-    } catch {
-      // Tyst fail om lagring ej tillåten/full
-    }
+    ;(async () => {
+      try {
+        const res = await fetch('/api/history', { method: 'GET' })
+        if (!res.ok) return
+        const data = await res.json() as { messages: Msg[]; conversationId: string | null }
+        if (data?.messages?.length > 0) setMessages(data.messages)
+        if (data?.conversationId) setConvId(data.conversationId)
+      } catch {}
+    })()
+  }, [])
+
+  // 3) Spara lokalt vid varje ändring
+  useEffect(() => {
+    try { localStorage.setItem(LSTORE_KEY, JSON.stringify(messages)) } catch {}
   }, [messages])
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
@@ -41,7 +46,8 @@ export default function Chat() {
     if (!input.trim()) return
     const text = input
     setInput('')
-    setMessages(m => [...m, { role: 'user', content: text }])
+    const next = [...messages, { role: 'user', content: text }]
+    setMessages(next)
 
     const res = await fetch('/api/chat', {
       method: 'POST',
@@ -52,27 +58,49 @@ export default function Chat() {
     if (!res.ok) {
       const msg = res.status === 429 ? 'Daily limit reached. Upgrade to continue 💫' : 'Something went wrong.'
       setMessages(m => [...m, { role: 'assistant', content: msg }])
+      // Försök ändå spara user-meddelandet i molnet (skapar conv vid behov)
+      try {
+        await fetch('/api/history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conversationId: convId, messages: [{ role: 'user', content: text }] })
+        })
+      } catch {}
       return
     }
 
-    const data = await res.json()
+    const data = await res.json() as { reply: string; conversationId?: string }
     if (data.conversationId && !convId) setConvId(data.conversationId)
-    setMessages(m => [...m, { role: 'assistant', content: data.reply }])
+    const withReply = [...next, { role: 'assistant', content: data.reply }]
+    setMessages(withReply)
+
+    // Spara båda i molnet
+    try {
+      const saveRes = await fetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversationId: convId ?? data.conversationId ?? null,
+          messages: [{ role: 'user', content: text }, { role: 'assistant', content: data.reply }]
+        })
+      })
+      const saved = await saveRes.json()
+      if (saved?.conversationId && !convId) setConvId(saved.conversationId)
+    } catch {}
   }
 
-  // Valfri: Nollställ historik (praktiskt vid test)
   function clearHistory() {
-    localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(LSTORE_KEY)
     setMessages([])
-    setConvId(undefined)
+    setConvId(null)
   }
 
   return (
     <div className="max-w-2xl mx-auto p-4 min-h-[100dvh]
                     bg-[radial-gradient(60%_40%_at_50%_0%,_var(--luna-tint),_transparent_70%)]">
 
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      {/* Header-kort med bättre kontrast */}
+      <div className="mb-4 rounded-2xl bg-white/70 backdrop-blur border p-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <img
             src="/icons/avatar-luna.png"
@@ -80,8 +108,8 @@ export default function Chat() {
             className="w-10 h-10 rounded-full object-cover ring-2 ring-[var(--luna-accent)]"
           />
           <div>
-            <div className="font-semibold">Luna</div>
-            <div className="text-xs text-gray-500">AI Companion</div>
+            <div className="font-semibold leading-tight">Luna</div>
+            <div className="text-xs text-gray-600">AI Companion</div>
           </div>
         </div>
 
@@ -115,7 +143,7 @@ export default function Chat() {
               className={`inline-block px-3 py-2 rounded-2xl
                          ${m.role === 'user'
                            ? 'bg-[var(--luna-accent)] text-white'
-                           : 'bg-gray-100'}`}
+                           : 'bg-gray-100 text-gray-800'}`}
             >
               {m.content}
             </div>
