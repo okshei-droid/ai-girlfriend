@@ -14,16 +14,19 @@ export default function CodeExchange() {
 
     ;(async () => {
       const supabase = supabaseBrowser()
-      // Byter in 'code' mot en session (PKCE flow)
-      const { error } = await supabase.auth.exchangeCodeForSession(window.location.href)
-      // Rensa URL:en från code/state så den blir snygg
-      const url = new URL(window.location.href)
-      url.searchParams.delete('code')
-      url.searchParams.delete('state')
-      window.history.replaceState({}, '', url.toString())
-
-      // Oavsett om det lyckas eller ej, försök ta användaren till hemsidan
-      router.replace('/')
+      try {
+        await supabase.auth.exchangeCodeForSession(window.location.href)
+      } catch (_) {
+        // ignore; vi försöker ändå redirecta hem
+      } finally {
+        // Rensa code/state ur URL:en
+        const url = new URL(window.location.href)
+        url.searchParams.delete('code')
+        url.searchParams.delete('state')
+        window.history.replaceState({}, '', url.toString())
+        // Gå till hemsidan (persona-hub)
+        router.replace('/')
+      }
     })()
   }, [params, router])
 
