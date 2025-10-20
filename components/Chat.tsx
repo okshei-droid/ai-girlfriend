@@ -9,9 +9,10 @@ export default function Chat() {
   const [input, setInput] = useState('')
   const [style, setStyle] = useState<'romance' | 'comfort' | 'flirty'>('romance')
   const [convId, setConvId] = useState<string | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // 1) Läs lokalt först (snabb återställning)
+  // 1) Läs lokalt först
   useEffect(() => {
     try {
       const saved = localStorage.getItem(LSTORE_KEY)
@@ -22,7 +23,7 @@ export default function Chat() {
     } catch {}
   }, [])
 
-  // 2) Läs molnhistorik (om inloggad) och skriv över lokalt om den finns
+  // 2) Läs molnhistorik
   useEffect(() => {
     ;(async () => {
       try {
@@ -58,7 +59,6 @@ export default function Chat() {
     if (!res.ok) {
       const msg = res.status === 429 ? 'Daily limit reached. Upgrade to continue 💫' : 'Something went wrong.'
       setMessages(m => [...m, { role: 'assistant', content: msg }])
-      // Försök ändå spara user-meddelandet i molnet (skapar conv vid behov)
       try {
         await fetch('/api/history', {
           method: 'POST',
@@ -74,7 +74,6 @@ export default function Chat() {
     const withReply = [...next, { role: 'assistant', content: data.reply }]
     setMessages(withReply)
 
-    // Spara båda i molnet
     try {
       const saveRes = await fetch('/api/history', {
         method: 'POST',
@@ -95,25 +94,71 @@ export default function Chat() {
     setConvId(null)
   }
 
+  async function logout() {
+    try {
+      await fetch('/api/logout', { method: 'POST' })
+    } catch {}
+    // Skicka användaren till login och stäng ev. meny
+    setMenuOpen(false)
+    window.location.href = '/login'
+  }
+
   return (
     <div className="max-w-2xl mx-auto p-4 min-h-[100dvh]
                     bg-[radial-gradient(60%_40%_at_50%_0%,_var(--luna-tint),_transparent_70%)]">
 
       {/* Header-kort med bättre kontrast */}
-      <div className="mb-4 rounded-2xl bg-white/70 backdrop-blur border p-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <img
-            src="/icons/avatar-luna.png"
-            alt="Luna"
-            className="w-10 h-10 rounded-full object-cover ring-2 ring-[var(--luna-accent)]"
-          />
-          <div>
-            <div className="font-semibold leading-tight">Luna</div>
-            <div className="text-xs text-gray-600">AI Companion</div>
+      <div className="mb-4 rounded-2xl bg-white/70 backdrop-blur border p-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img
+              src="/icons/avatar-luna.png"
+              alt="Luna"
+              className="w-10 h-10 rounded-full object-cover ring-2 ring-[var(--luna-accent)]"
+            />
+            <div>
+              <div className="font-semibold leading-tight">Luna</div>
+              <div className="text-xs text-gray-600">AI Companion</div>
+            </div>
+          </div>
+
+          <div className="relative">
+            <button
+              onClick={() => setMenuOpen(v => !v)}
+              className="h-10 w-10 grid place-items-center rounded-xl bg-white/80 border hover:bg-white"
+              aria-label="Öppna meny"
+              title="Meny"
+            >
+              ⋯
+            </button>
+
+            {menuOpen && (
+              <div className="absolute right-0 mt-2 w-44 rounded-xl bg-white shadow-lg border overflow-hidden z-10">
+                <button
+                  onClick={() => { setMenuOpen(false); clearHistory() }}
+                  className="w-full text-left px-4 py-2 hover:bg-gray-50"
+                >
+                  Reset chat
+                </button>
+                <button
+                  onClick={() => { setMenuOpen(false); /* TODO: settings */ }}
+                  className="w-full text-left px-4 py-2 hover:bg-gray-50"
+                >
+                  Inställningar (snart)
+                </button>
+                <button
+                  onClick={logout}
+                  className="w-full text-left px-4 py-2 text-red-600 hover:bg-red-50"
+                >
+                  Logga ut
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Stilväljare */}
+        <div className="mt-3">
           <select
             className="border p-2 rounded-xl bg-white/80 backdrop-blur
                        focus:outline-none focus:ring-2 focus:ring-[var(--luna-accent)]"
@@ -124,14 +169,6 @@ export default function Chat() {
             <option value="comfort">Comfort</option>
             <option value="flirty">Flirty</option>
           </select>
-          <button
-            onClick={clearHistory}
-            className="px-3 py-2 rounded-xl text-white font-medium"
-            style={{ background: 'var(--luna-accent)' }}
-            title="Clear history"
-          >
-            Reset
-          </button>
         </div>
       </div>
 
