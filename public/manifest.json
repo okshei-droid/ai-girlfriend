@@ -2,7 +2,7 @@
   "name": "Luna — AI Companion",
   "short_name": "Luna",
   "description": "A warm, romantic AI companion in your pocket.",
-  "start_url": "/chat",
+  "start_url": "/chat?source=pwa",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "fullscreen"],
@@ -11,6 +11,7 @@
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/avatar-luna.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
   ]
 }

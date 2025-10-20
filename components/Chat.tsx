@@ -3,12 +3,37 @@ import { useEffect, useRef, useState } from 'react'
 
 type Msg = { role: 'user' | 'assistant', content: string }
 
+const STORAGE_KEY = 'luna_chat_history_v1'
+
 export default function Chat() {
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [style, setStyle] = useState<'romance' | 'comfort' | 'flirty'>('romance')
   const [convId, setConvId] = useState<string>()
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  // === Läs historik vid start ===
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (saved) {
+        const parsed = JSON.parse(saved) as Msg[]
+        if (Array.isArray(parsed)) setMessages(parsed)
+      }
+    } catch {
+      // Ignorera korrupt lagring
+      localStorage.removeItem(STORAGE_KEY)
+    }
+  }, [])
+
+  // === Spara historik vid varje ändring ===
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages))
+    } catch {
+      // Tyst fail om lagring ej tillåten/full
+    }
+  }, [messages])
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
@@ -17,19 +42,29 @@ export default function Chat() {
     const text = input
     setInput('')
     setMessages(m => [...m, { role: 'user', content: text }])
+
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ conversationId: convId, message: text, style })
     })
+
     if (!res.ok) {
       const msg = res.status === 429 ? 'Daily limit reached. Upgrade to continue 💫' : 'Something went wrong.'
       setMessages(m => [...m, { role: 'assistant', content: msg }])
       return
     }
+
     const data = await res.json()
     if (data.conversationId && !convId) setConvId(data.conversationId)
     setMessages(m => [...m, { role: 'assistant', content: data.reply }])
+  }
+
+  // Valfri: Nollställ historik (praktiskt vid test)
+  function clearHistory() {
+    localStorage.removeItem(STORAGE_KEY)
+    setMessages([])
+    setConvId(undefined)
   }
 
   return (
@@ -50,16 +85,26 @@ export default function Chat() {
           </div>
         </div>
 
-        <select
-          className="border p-2 rounded-xl bg-white/80 backdrop-blur
-                     focus:outline-none focus:ring-2 focus:ring-[var(--luna-accent)]"
-          value={style}
-          onChange={(e) => setStyle(e.target.value as any)}
-        >
-          <option value="romance">Romance</option>
-          <option value="comfort">Comfort</option>
-          <option value="flirty">Flirty</option>
-        </select>
+        <div className="flex items-center gap-2">
+          <select
+            className="border p-2 rounded-xl bg-white/80 backdrop-blur
+                       focus:outline-none focus:ring-2 focus:ring-[var(--luna-accent)]"
+            value={style}
+            onChange={(e) => setStyle(e.target.value as any)}
+          >
+            <option value="romance">Romance</option>
+            <option value="comfort">Comfort</option>
+            <option value="flirty">Flirty</option>
+          </select>
+          <button
+            onClick={clearHistory}
+            className="px-3 py-2 rounded-xl text-white font-medium"
+            style={{ background: 'var(--luna-accent)' }}
+            title="Clear history"
+          >
+            Reset
+          </button>
+        </div>
       </div>
 
       {/* Messages */}
