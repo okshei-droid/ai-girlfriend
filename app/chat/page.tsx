@@ -1,44 +1,35 @@
-'use client'
-
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabaseBrowser } from '@/lib/supabaseClient'
+// app/chat/page.tsx
 import Chat from '@/components/Chat'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+import Link from 'next/link'
 
-export default function ChatPage() {
-  const router = useRouter()
-  const [user, setUser] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
+function supabaseServer() {
+  const cookieStore = cookies()
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) { return cookieStore.get(name)?.value },
+        set() {}, // vi skriver inte cookies här
+        remove() {},
+      },
+    }
+  )
+}
 
-  useEffect(() => {
-    (async () => {
-      const supabase = supabaseBrowser()
+export default async function ChatPage() {
+  const supabase = supabaseServer()
+  const { data: { user } } = await supabase.auth.getUser()
 
-      // Om du kommer via ?code=... växla den till en session
-      const url = new URL(window.location.href)
-      const code = url.searchParams.get('code')
-      if (code) {
-        await supabase.auth.exchangeCodeForSession(url.toString())
-        url.searchParams.delete('code')
-        window.history.replaceState({}, '', url.toString())
-      }
-
-      // Kolla om användaren är inloggad
-      const { data } = await supabase.auth.getUser()
-      if (!data.user) {
-        router.replace('/login')
-        return
-      }
-
-      setUser(data.user)
-      setLoading(false)
-    })()
-  }, [router])
-
-  if (loading) {
+  if (!user) {
+    // Ingen loop: bara presentera länk till /login
     return (
-      <main style={{maxWidth: 640, margin: '40px auto', fontFamily: 'sans-serif'}}>
-        <p>Checking session...</p>
+      <main className="max-w-md mx-auto p-6">
+        <h1 className="text-xl font-semibold mb-2">Please sign in</h1>
+        <p className="text-gray-600 mb-4">Your session seems missing or expired.</p>
+        <Link href="/login" className="underline text-blue-600">Go to login</Link>
       </main>
     )
   }
