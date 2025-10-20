@@ -1,29 +1,31 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabaseBrowser } from '@/lib/supabaseClient'
 
 export default function CodeExchange() {
   const router = useRouter()
+  const params = useSearchParams()
 
   useEffect(() => {
-    const url = new URL(window.location.href)
-    const code = url.searchParams.get('code')
+    const code = params.get('code')
     if (!code) return
 
     ;(async () => {
       const supabase = supabaseBrowser()
-      const { error } = await supabase.auth.exchangeCodeForSession(url.toString())
-      if (error) {
-        console.error('exchangeCodeForSession error:', error.message)
-        router.replace('/login')
-        return
-      }
-      // Rensa parametern och gå till /chat
-      router.replace('/chat')
+      // Byter in 'code' mot en session (PKCE flow)
+      const { error } = await supabase.auth.exchangeCodeForSession(window.location.href)
+      // Rensa URL:en från code/state så den blir snygg
+      const url = new URL(window.location.href)
+      url.searchParams.delete('code')
+      url.searchParams.delete('state')
+      window.history.replaceState({}, '', url.toString())
+
+      // Oavsett om det lyckas eller ej, försök ta användaren till hemsidan
+      router.replace('/')
     })()
-  }, [router])
+  }, [params, router])
 
   return null
 }
