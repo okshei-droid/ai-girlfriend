@@ -36,7 +36,7 @@ export default function Chat() {
     })()
   }, [])
 
-  // 3) Spara lokalt vid varje ändring
+  // 3) Spara lokalt vid ändring
   useEffect(() => {
     try { localStorage.setItem(LSTORE_KEY, JSON.stringify(messages)) } catch {}
   }, [messages])
@@ -59,6 +59,7 @@ export default function Chat() {
     if (!res.ok) {
       const msg = res.status === 429 ? 'Daily limit reached. Upgrade to continue 💫' : 'Something went wrong.'
       setMessages(m => [...m, { role: 'assistant', content: msg }])
+      // spara åtminstone user-meddelandet i molnet
       try {
         await fetch('/api/history', {
           method: 'POST',
@@ -74,6 +75,7 @@ export default function Chat() {
     const withReply = [...next, { role: 'assistant', content: data.reply }]
     setMessages(withReply)
 
+    // spara båda i molnet
     try {
       const saveRes = await fetch('/api/history', {
         method: 'POST',
@@ -95,10 +97,7 @@ export default function Chat() {
   }
 
   async function logout() {
-    try {
-      await fetch('/api/logout', { method: 'POST' })
-    } catch {}
-    // Skicka användaren till login och stäng ev. meny
+    try { await fetch('/api/logout', { method: 'POST' }) } catch {}
     setMenuOpen(false)
     window.location.href = '/login'
   }
@@ -107,7 +106,7 @@ export default function Chat() {
     <div className="max-w-2xl mx-auto p-4 min-h-[100dvh]
                     bg-[radial-gradient(60%_40%_at_50%_0%,_var(--luna-tint),_transparent_70%)]">
 
-      {/* Header-kort med bättre kontrast */}
+      {/* Header-kort */}
       <div className="mb-4 rounded-2xl bg-white/70 backdrop-blur border p-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -122,55 +121,55 @@ export default function Chat() {
             </div>
           </div>
 
-          <div className="relative">
+          <div className="flex items-center gap-2">
+            <select
+              className="border p-2 rounded-xl bg-white/80 backdrop-blur
+                         focus:outline-none focus:ring-2 focus:ring-[var(--luna-accent)]"
+              value={style}
+              onChange={(e) => setStyle(e.target.value as 'romance'|'comfort'|'flirty')}
+            >
+              <option value="romance">Romance</option>
+              <option value="comfort">Comfort</option>
+              <option value="flirty">Flirty</option>
+            </select>
+
             <button
               onClick={() => setMenuOpen(v => !v)}
               className="h-10 w-10 grid place-items-center rounded-xl bg-white/80 border hover:bg-white"
-              aria-label="Öppna meny"
-              title="Meny"
+              aria-label="Open menu"
+              title="Menu"
             >
               ⋯
             </button>
-
-            {menuOpen && (
-              <div className="absolute right-0 mt-2 w-44 rounded-xl bg-white shadow-lg border overflow-hidden z-10">
-                <button
-                  onClick={() => { setMenuOpen(false); clearHistory() }}
-                  className="w-full text-left px-4 py-2 hover:bg-gray-50"
-                >
-                  Reset chat
-                </button>
-                <button
-                  onClick={() => { setMenuOpen(false); /* TODO: settings */ }}
-                  className="w-full text-left px-4 py-2 hover:bg-gray-50"
-                >
-                  Inställningar (snart)
-                </button>
-                <button
-                  onClick={logout}
-                  className="w-full text-left px-4 py-2 text-red-600 hover:bg-red-50"
-                >
-                  Logga ut
-                </button>
-              </div>
-            )}
           </div>
         </div>
 
-        {/* Stilväljare */}
-        <div className="mt-3">
-          <select
-            className="border p-2 rounded-xl bg-white/80 backdrop-blur
-                       focus:outline-none focus:ring-2 focus:ring-[var(--luna-accent)]"
-            value={style}
-            onChange={(e) => setStyle(e.target.value as any)}
-          >
-            <option value="romance">Romance</option>
-            <option value="comfort">Comfort</option>
-            <option value="flirty">Flirty</option>
-          </select>
+        {/* Info-rad */}
+        <div className="text-xs text-gray-600 mt-2">
+          You can chat in any language — Luna will follow you.
         </div>
       </div>
+
+      {/* FIXED DROPDOWN MENY */}
+      {menuOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+          <div className="fixed right-4 top-16 z-50 w-48 rounded-xl bg-white shadow-lg border overflow-hidden">
+            <button
+              onClick={() => { setMenuOpen(false); clearHistory() }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-50"
+            >
+              Reset chat
+            </button>
+            <button
+              onClick={logout}
+              className="w-full text-left px-4 py-2 text-red-600 hover:bg-red-50"
+            >
+              Log out
+            </button>
+          </div>
+        </>
+      )}
 
       {/* Messages */}
       <div className="border rounded-2xl bg-white/70 backdrop-blur p-3 min-h-[50vh]">
