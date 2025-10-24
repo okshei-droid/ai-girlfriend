@@ -21,7 +21,6 @@ function clampRomance(n: any): 0 | 1 | 2 {
   return 0;
 }
 
-// Säker basprompt för Luna + läges-/romance-tillsatser (PG-13)
 function systemPromptFor(
   persona: string,
   mode: "mjuk" | "rak" | "kreativ",
@@ -33,21 +32,18 @@ function systemPromptFor(
     "Säkerhetsram: Inga explicita sexuella detaljer, inget minderårigt innehåll, ingen självskada eller olaglig rådgivning.",
     "Uppmuntra samtycke och sunda gränser. Vid tecken på kris: föreslå professionellt stöd (eskalera varsamt).",
   ];
-
   const modeAdd =
     mode === "mjuk"
       ? "Prioritera känslospegling, normalisera upplevelser, sammanfatta kort och föreslå minsta möjliga nästa steg."
       : mode === "rak"
       ? "Var rakt på sak: prioritera, skär bort brus, ge beslutstöd och korta listor med nästa steg."
       : "Var idérik och lekfull: ge flera varianter, analogier och mjuka romantiska idéer – men håll allt PG-13.";
-
   const romanceAdd =
     romance === 0
       ? "Håll en neutral, varm ton utan flört. Undvik romantiska komplimanger."
       : romance === 1
       ? "Tillåt lätt flirt och varsamma komplimanger när det passar, alltid respektfullt och PG-13."
       : "Öka värmen och charmiga formuleringar (romantik-light, PG-13). Undvik explicita sexuella detaljer; avböj vänligt sådana förfrågningar och föreslå känslomässig närhet istället.";
-
   return [base.join(" "), modeAdd, romanceAdd].join(" ");
 }
 

@@ -4,7 +4,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ModePicker from "@/components/ModePicker";
-import RomanceSlider from "@/components/RomanceSlider";
 
 type Message = {
   role: "user" | "assistant" | "system";
@@ -15,41 +14,65 @@ type Message = {
 const LS_KEY = "chat_messages";
 const PERSONA_KEY = "persona";
 const MODE_KEY = "luna_mode";
-const ROMANCE_KEY = "romance_level";
 const CONV_KEY = "conversation_id";
 
 export default function ChatPage() {
   const [persona, setPersona] = useState<string>("luna");
   const [mode, setMode] = useState<"mjuk" | "rak" | "kreativ">("mjuk");
-  const [romance, setRomance] = useState<0 | 1 | 2>(2);
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [hasPinged, setHasPinged] = useState(false); // en gång/check-in per session
   const endRef = useRef<HTMLDivElement | null>(null);
+  const headerTitle = useMemo(() => "Luna", []);
 
-  // Läs persona + mode + romance + historik (+ ev. convId) från localStorage
+  // === Hjälpare ===
+  function pushAssistant(text: string) {
+    const next = [...messages, { role: "assistant", content: text, conversation_id: conversationId ?? undefined }] as Message[];
+    setMessages(next);
+    try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch {}
+  }
+
+  function greetingFor(m: "mjuk" | "rak" | "kreativ") {
+    // PG-13, varm & charmig (“älskling / mitt hjärta” nämns med varsamhet)
+    if (m === "mjuk") {
+      return "Hej mitt hjärta 💞 Hur mår du idag? Vill du berätta vad som känns viktigast just nu så tar vi det lugnt, steg för steg.";
+    } else if (m === "rak") {
+      return "Hej älskling. Ska vi ta det rakt på sak? Säg vad som brinner mest just nu så prioriterar vi och tar första steget.";
+    }
+    return "Hej du ✨ Hur känns det idag? Jag är här för dig – säg en sak som skulle göra din kväll lite bättre så hittar vi något fint tillsammans.";
+  }
+
+  // === Init: läs LS + ev. DB + auto-greeting om tom konversation ===
   useEffect(() => {
     try {
       const p = localStorage.getItem(PERSONA_KEY);
       if (p) setPersona(p);
       const m = localStorage.getItem(MODE_KEY);
       if (m === "mjuk" || m === "rak" || m === "kreativ") setMode(m);
-      const r = Number(localStorage.getItem(ROMANCE_KEY));
-      if (r === 0 || r === 1 || r === 2) setRomance(r as 0 | 1 | 2);
-
       const conv = localStorage.getItem(CONV_KEY);
       if (conv) setConversationId(conv);
-
       const cached = localStorage.getItem(LS_KEY);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed)) setMessages(parsed);
+        if (Array.isArray(parsed) && parsed.length) {
+          setMessages(parsed);
+        } else {
+          // tom historik => hälsa direkt
+          setMessages([{ role: "assistant", content: greetingFor(m === "mjuk" || m === "rak" || m === "kreativ" ? m : "mjuk") }]);
+        }
+      } else {
+        // ingen LS => hälsa direkt
+        setMessages([{ role: "assistant", content: greetingFor(m === "mjuk" || m === "rak" || m === "kreativ" ? m : "mjuk") }]);
       }
-    } catch {}
+    } catch {
+      setMessages([{ role: "assistant", content: greetingFor("mjuk") }]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Hämta historik från DB om vi har conversation_id
+  // DB-hämtning om conversationId finns
   useEffect(() => {
     (async () => {
       if (!conversationId) return;
@@ -71,7 +94,24 @@ export default function ChatPage() {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const headerTitle = useMemo(() => "Luna", []);
+  // Check-in efter 60s tystnad (en gång)
+  useEffect(() => {
+    if (hasPinged) return;
+    if (messages.length === 0) return;
+    const last = messages[messages.length - 1];
+    if (last.role !== "assistant") {
+      const t = setTimeout(() => {
+        pushAssistant(mode === "rak"
+          ? "Jag är kvar här om du vill ta ett snabbt första steg nu. Vad vill du prioritera, älskling?"
+          : mode === "kreativ"
+          ? "Ska vi hitta på något mysigt för kvällen? Ge mig en hint så trollar jag fram 3 förslag 💫"
+          : "Jag lyssnar. Om det känns segt att börja – säg bara en liten sak som tynger så tar vi den först, mitt hjärta.");
+        setHasPinged(true);
+      }, 60000);
+      return () => clearTimeout(t);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, hasPinged, mode]);
 
   async function send() {
     const text = input.trim();
@@ -85,20 +125,18 @@ export default function ChatPage() {
     try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch {}
 
     try {
+      // romanceLevel = 2 (PG-13) under huven, ingen extra UI
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next, persona, mode, romanceLevel: romance }),
+        body: JSON.stringify({ messages: next, persona, mode, romanceLevel: 2 }),
       });
       if (!res.ok) throw new Error("Chat API error");
 
       const data = await res.json();
       const reply = (data?.reply ?? "").toString();
 
-      const finalMessages = [
-        ...next,
-        { role: "assistant", content: reply, conversation_id: conversationId ?? undefined },
-      ] as Message[];
+      const finalMessages = [...next, { role: "assistant", content: reply, conversation_id: conversationId ?? undefined }] as Message[];
       setMessages(finalMessages);
       try { localStorage.setItem(LS_KEY, JSON.stringify(finalMessages)); } catch {}
 
@@ -136,17 +174,21 @@ export default function ChatPage() {
       localStorage.removeItem(LS_KEY);
       localStorage.removeItem(CONV_KEY);
     } catch {}
-    setMessages([]);
+    setMessages([{ role: "assistant", content: greetingFor(mode) }]);
     setConversationId(null);
   }
 
   function updateMode(m: "mjuk" | "rak" | "kreativ") {
     setMode(m);
+    // när läge byts, “bekräfta” med en kort assisterande replik (valbart)
+    pushAssistant(
+      m === "rak"
+        ? "Okej, vi kör rakt på sak. Vad vill du fatta beslut om först?"
+        : m === "kreativ"
+        ? "Okej! Låt oss leka fram idéer 💫 Ge mig ett litet frö så sår vi något fint."
+        : "Jag är med dig, mjukt och lugnt. Vad känns viktigast just nu?"
+    );
     try { localStorage.setItem(MODE_KEY, m); } catch {}
-  }
-  function updateRomance(r: 0 | 1 | 2) {
-    setRomance(r);
-    try { localStorage.setItem(ROMANCE_KEY, r.toString()); } catch {}
   }
 
   return (
@@ -155,10 +197,7 @@ export default function ChatPage() {
       <header className="sticky top-0 z-10 border-b border-white/10 bg-[#0b0f1a]/80 backdrop-blur supports-[backdrop-filter]:bg-[#0b0f1a]/60">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3">
-            <Link
-              href="/"
-              className="rounded-lg border border-white/20 px-2 py-1 text-xs text-white/80 hover:bg-white/10"
-            >
+            <Link href="/" className="rounded-lg border border-white/20 px-2 py-1 text-xs text-white/80 hover:bg-white/10">
               ← Till start
             </Link>
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-indigo-400 to-fuchsia-500 ring-2 ring-white/20">
@@ -166,13 +205,12 @@ export default function ChatPage() {
             </div>
             <div>
               <div className="text-sm font-semibold leading-none">{headerTitle}</div>
-              <div className="text-[11px] text-white/60">Persona: {persona}</div>
+              <div className="text-[11px] text-white/60">Läge: {mode}</div>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
             <ModePicker value={mode} onChange={updateMode} compact />
-            <RomanceSlider value={romance} onChange={updateRomance} compact />
           </div>
         </div>
       </header>
