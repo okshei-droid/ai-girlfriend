@@ -1,39 +1,61 @@
-export default function Home() {
+// app/page.tsx
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import PersonaCard from "@/components/PersonaCard";
+
+export default function HomeHub() {
+  const router = useRouter();
+  const [hasHistory, setHasHistory] = useState(false);
+
+  // Kolla om det finns lokalt sparade meddelanden (från 1.4-logiken)
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem("chat_messages");
+      setHasHistory(!!cached && cached.length > 2);
+    } catch {
+      setHasHistory(false);
+    }
+  }, []);
+
+  const startWithLuna = () => {
+    try {
+      localStorage.setItem("persona", "luna");
+    } catch {}
+    router.push("/chat");
+  };
+
+  const continueChat = () => {
+    // Om vi har historik så hoppar vi direkt till chatten
+    router.push("/chat");
+  };
+
+  const pageTitle = useMemo(() => "Välj persona", []);
+
   return (
-    <main className="max-w-2xl mx-auto p-6 min-h-[100dvh]
-                     bg-[radial-gradient(60%_40%_at_50%_0%,_var(--luna-tint),_transparent_70%)]">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Welcome 💜</h1>
-        <p className="text-gray-600 mt-1">
-          Choose your companion. You can chat in any language — Luna will follow you.
-        </p>
-      </div>
+    <main className="min-h-dvh bg-gradient-to-b from-[#0b0f1a] to-[#0e1526] text-white">
+      <div className="mx-auto max-w-5xl px-4 py-10">
+        <header className="mb-8">
+          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">{pageTitle}</h1>
+          <p className="mt-2 text-white/70">
+            Välj vem du vill prata med. Du kan när som helst byta senare.
+          </p>
+        </header>
 
-      <div className="grid gap-4">
-        {/* Luna card */}
-        <a href="/chat" className="group flex items-center gap-4 border rounded-2xl p-4 bg-white/70 backdrop-blur hover:bg-white transition">
-          <img
-            src="/icons/avatar-luna.png"
-            alt="Luna"
-            className="w-14 h-14 rounded-full object-cover ring-2 ring-[var(--luna-accent)]"
+        <section className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <PersonaCard
+            title="Luna"
+            subtitle="Varm, tydlig, lösningsorienterad"
+            description="Snabb, empatisk AI-kompis som hjälper dig strukturera tankar, ta beslut och få saker gjorda – utan krångel."
+            onStart={startWithLuna}
+            onContinue={continueChat}
+            canContinue={hasHistory}
+            imageSrc="/luna.png"
           />
-          <div>
-            <div className="font-medium">Luna</div>
-            <div className="text-sm text-gray-600">Warm, romantic & playful</div>
-          </div>
-          <div className="ml-auto text-[var(--luna-accent)] group-hover:translate-x-0.5 transition">→</div>
-        </a>
-
-        {/* Future personas placeholder */}
-        <div className="opacity-60 border rounded-2xl p-4 bg-white/50 backdrop-blur">
-          <div className="font-medium">Aurora (coming soon)</div>
-          <div className="text-sm text-gray-600">Gentle & spiritual growth</div>
-        </div>
-        <div className="opacity-60 border rounded-2xl p-4 bg-white/50 backdrop-blur">
-          <div className="font-medium">Nova (coming soon)</div>
-          <div className="text-sm text-gray-600">Supportive life coach</div>
-        </div>
+          {/* Fler personas senare – t.ex. Aurora, Coach Nova, etc. */}
+        </section>
       </div>
     </main>
-  )
+  );
 }

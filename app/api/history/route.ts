@@ -1,89 +1,61 @@
-import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { createServerClient } from '@supabase/ssr'
+// app/api/history/route.ts
+// Mockad historik (in-memory) för lokal utveckling.
+// Tar bort fel från Supabase/cookies i Next 15 tills vi kopplar riktig DB igen.
 
-type Msg = { role: 'user'|'assistant', content: string }
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-// Server-Supabase med cookie-stöd (SSR)
-function supabaseServer() {
-  const cookieStore = cookies()
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) { return cookieStore.get(name)?.value },
-        set() {},
-        remove() {},
-      },
+// Enkel in-memory store (för lokal dev; NOLL persistering över omstart)
+type Msg = { role: "user" | "assistant" | "system"; content: string; conversation_id?: string };
+const store = new Map<string, Msg[]>();
+
+function newId() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+// GET /api/history?conversation_id=xyz  → hämtar meddelanden (eller tomt)
+export async function GET(req: Request) {
+  try {
+    const url = new URL(req.url);
+    const convId = url.searchParams.get("conversation_id");
+    if (convId && store.has(convId)) {
+      return new Response(JSON.stringify({ messages: store.get(convId) ?? [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
     }
-  )
-}
-
-/** GET /api/history
- * Hämtar senaste konversation + alla meddelanden för inloggad user
- */
-export async function GET() {
-  const supabase = supabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ messages: [], conversationId: null }, { status: 200 })
-
-  const { data: convs } = await supabase
-    .from('conversations')
-    .select('id, created_at')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(1)
-
-  if (!convs || convs.length === 0) {
-    return NextResponse.json({ messages: [], conversationId: null }, { status: 200 })
+    // Ingen conversation_id → returnera tomt (så UI inte kraschar)
+    return new Response(JSON.stringify({ messages: [] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (e: any) {
+    return new Response(JSON.stringify({ error: e?.message ?? "Unknown error" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
   }
-
-  const conversationId = convs[0].id
-  const { data: msgs } = await supabase
-    .from('messages')
-    .select('role, content, created_at')
-    .eq('conversation_id', conversationId)
-    .order('created_at', { ascending: true })
-
-  return NextResponse.json({ messages: (msgs ?? []) as Msg[], conversationId }, { status: 200 })
 }
 
-/** POST /api/history
- * Body: { conversationId?: string, messages: Msg[] }
- * Skapar conversation vid behov och lägger till messages.
- */
+// POST /api/history  body: { conversation_id?: string, messages: Msg[] }
 export async function POST(req: Request) {
-  const supabase = supabaseServer()
-  const body = await req.json().catch(() => ({}))
-  const inputMessages = (body?.messages ?? []) as Msg[]
-  let conversationId = body?.conversationId as string | undefined
+  try {
+    const body = await req.json().catch(() => ({} as any));
+    const incoming: Msg[] = Array.isArray(body?.messages) ? body.messages : [];
+    let convId: string = body?.conversation_id || newId();
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    // Tillåt tyst “miss” för anonyma – vi sparar inte i molnet då
-    return NextResponse.json({ saved: false, reason: 'anonymous' }, { status: 200 })
+    const prev = store.get(convId) ?? [];
+    const next = [...prev, ...incoming];
+    store.set(convId, next);
+
+    return new Response(JSON.stringify({ ok: true, conversation_id: convId }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (e: any) {
+    return new Response(JSON.stringify({ error: e?.message ?? "Unknown error" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
   }
-
-  if (!conversationId) {
-    const { data: conv, error: convErr } = await supabase
-      .from('conversations')
-      .insert({ user_id: user.id })
-      .select('id')
-      .single()
-    if (convErr || !conv) return NextResponse.json({ error: 'failed_to_create_conversation' }, { status: 500 })
-    conversationId = conv.id
-  }
-
-  if (inputMessages.length > 0) {
-    const rows = inputMessages.map(m => ({
-      conversation_id: conversationId!,
-      role: m.role,
-      content: m.content
-    }))
-    const { error: insErr } = await supabase.from('messages').insert(rows)
-    if (insErr) return NextResponse.json({ error: 'failed_to_insert_messages' }, { status: 500 })
-  }
-
-  return NextResponse.json({ ok: true, conversationId }, { status: 200 })
 }
