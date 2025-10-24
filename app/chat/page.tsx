@@ -1,7 +1,10 @@
 // app/chat/page.tsx
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import ModePicker from "@/components/ModePicker";
+import RomanceSlider from "@/components/RomanceSlider";
 
 type Message = {
   role: "user" | "assistant" | "system";
@@ -11,22 +14,33 @@ type Message = {
 
 const LS_KEY = "chat_messages";
 const PERSONA_KEY = "persona";
+const MODE_KEY = "luna_mode";
+const ROMANCE_KEY = "romance_level";
+const CONV_KEY = "conversation_id";
 
 export default function ChatPage() {
   const [persona, setPersona] = useState<string>("luna");
+  const [mode, setMode] = useState<"mjuk" | "rak" | "kreativ">("mjuk");
+  const [romance, setRomance] = useState<0 | 1 | 2>(2);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
 
-  // Läs persona + historik från localStorage
+  // Läs persona + mode + romance + historik (+ ev. convId) från localStorage
   useEffect(() => {
     try {
       const p = localStorage.getItem(PERSONA_KEY);
       if (p) setPersona(p);
-    } catch {}
+      const m = localStorage.getItem(MODE_KEY);
+      if (m === "mjuk" || m === "rak" || m === "kreativ") setMode(m);
+      const r = Number(localStorage.getItem(ROMANCE_KEY));
+      if (r === 0 || r === 1 || r === 2) setRomance(r as 0 | 1 | 2);
 
-    try {
+      const conv = localStorage.getItem(CONV_KEY);
+      if (conv) setConversationId(conv);
+
       const cached = localStorage.getItem(LS_KEY);
       if (cached) {
         const parsed = JSON.parse(cached);
@@ -35,23 +49,29 @@ export default function ChatPage() {
     } catch {}
   }, []);
 
+  // Hämta historik från DB om vi har conversation_id
+  useEffect(() => {
+    (async () => {
+      if (!conversationId) return;
+      try {
+        const res = await fetch(`/api/history?conversation_id=${conversationId}`, { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        const dbMessages = (data?.messages ?? []) as Message[];
+        if (dbMessages.length) {
+          setMessages(dbMessages);
+          localStorage.setItem(LS_KEY, JSON.stringify(dbMessages));
+        }
+      } catch {}
+    })();
+  }, [conversationId]);
+
   // Auto-scroll
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const headerTitle = useMemo(() => {
-    switch (persona) {
-      case "luna":
-        return "Luna";
-      case "freja":
-        return "Freja";
-      case "echo":
-        return "Echo";
-      default:
-        return "Luna";
-    }
-  }, [persona]);
+  const headerTitle = useMemo(() => "Luna", []);
 
   async function send() {
     const text = input.trim();
@@ -60,31 +80,52 @@ export default function ChatPage() {
     setIsLoading(true);
     setInput("");
 
-    const next = [...messages, { role: "user", content: text }] as Message[];
+    const next = [...messages, { role: "user", content: text, conversation_id: conversationId ?? undefined }] as Message[];
     setMessages(next);
-    try {
-      localStorage.setItem(LS_KEY, JSON.stringify(next));
-    } catch {}
+    try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch {}
 
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next, persona }),
+        body: JSON.stringify({ messages: next, persona, mode, romanceLevel: romance }),
       });
       if (!res.ok) throw new Error("Chat API error");
 
       const data = await res.json();
       const reply = (data?.reply ?? "").toString();
 
-      const finalMessages = [...next, { role: "assistant", content: reply }] as Message[];
+      const finalMessages = [
+        ...next,
+        { role: "assistant", content: reply, conversation_id: conversationId ?? undefined },
+      ] as Message[];
       setMessages(finalMessages);
+      try { localStorage.setItem(LS_KEY, JSON.stringify(finalMessages)); } catch {}
+
+      // Spara i DB
       try {
-        localStorage.setItem(LS_KEY, JSON.stringify(finalMessages));
+        const saveRes = await fetch("/api/history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            conversation_id: conversationId ?? undefined,
+            messages: [
+              { role: "user", content: text, conversation_id: conversationId ?? undefined },
+              { role: "assistant", content: reply, conversation_id: conversationId ?? undefined },
+            ],
+          }),
+        });
+        if (saveRes.ok) {
+          const saved = await saveRes.json();
+          if (saved?.conversation_id && !conversationId) {
+            setConversationId(saved.conversation_id);
+            try { localStorage.setItem(CONV_KEY, saved.conversation_id); } catch {}
+          }
+        }
       } catch {}
     } catch (e) {
       console.error(e);
-      alert("Chat API error – kontrollera /api/chat i Vercel-loggarna.");
+      alert("Chat API error – kontrollera /api/chat.");
     } finally {
       setIsLoading(false);
     }
@@ -93,8 +134,19 @@ export default function ChatPage() {
   function resetHistory() {
     try {
       localStorage.removeItem(LS_KEY);
+      localStorage.removeItem(CONV_KEY);
     } catch {}
     setMessages([]);
+    setConversationId(null);
+  }
+
+  function updateMode(m: "mjuk" | "rak" | "kreativ") {
+    setMode(m);
+    try { localStorage.setItem(MODE_KEY, m); } catch {}
+  }
+  function updateRomance(r: 0 | 1 | 2) {
+    setRomance(r);
+    try { localStorage.setItem(ROMANCE_KEY, r.toString()); } catch {}
   }
 
   return (
@@ -103,22 +155,25 @@ export default function ChatPage() {
       <header className="sticky top-0 z-10 border-b border-white/10 bg-[#0b0f1a]/80 backdrop-blur supports-[backdrop-filter]:bg-[#0b0f1a]/60">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3">
+            <Link
+              href="/"
+              className="rounded-lg border border-white/20 px-2 py-1 text-xs text-white/80 hover:bg-white/10"
+            >
+              ← Till start
+            </Link>
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-indigo-400 to-fuchsia-500 ring-2 ring-white/20">
-              <span className="text-xs font-bold text-white">
-                {headerTitle.charAt(0)}
-              </span>
+              <span className="text-xs font-bold text-white">L</span>
             </div>
             <div>
               <div className="text-sm font-semibold leading-none">{headerTitle}</div>
               <div className="text-[11px] text-white/60">Persona: {persona}</div>
             </div>
           </div>
-          <button
-            className="text-xs rounded-lg border border-white/20 px-2.5 py-1 text-white/80 hover:bg-white/10"
-            onClick={resetHistory}
-          >
-            Nollställ historik
-          </button>
+
+          <div className="flex items-center gap-3">
+            <ModePicker value={mode} onChange={updateMode} compact />
+            <RomanceSlider value={romance} onChange={updateRomance} compact />
+          </div>
         </div>
       </header>
 
@@ -164,6 +219,13 @@ export default function ChatPage() {
               disabled={isLoading || !input.trim()}
             >
               Skicka
+            </button>
+            <button
+              className="rounded-xl border border-white/20 px-3 py-2 text-sm text-white/80 hover:bg-white/10"
+              onClick={resetHistory}
+              title="Rensa meddelanden (lokalt och conv-id)"
+            >
+              Nollställ
             </button>
           </div>
         </div>
