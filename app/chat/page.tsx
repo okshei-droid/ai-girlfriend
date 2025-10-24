@@ -19,7 +19,7 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
 
-  // Läs persona + historik från localStorage (EN gång vid start)
+  // Läs persona + historik från localStorage
   useEffect(() => {
     try {
       const p = localStorage.getItem(PERSONA_KEY);
@@ -35,7 +35,7 @@ export default function ChatPage() {
     } catch {}
   }, []);
 
-  // Auto-scroll vid nya meddelanden
+  // Auto-scroll
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -43,6 +43,11 @@ export default function ChatPage() {
   const headerTitle = useMemo(() => {
     switch (persona) {
       case "luna":
+        return "Luna";
+      case "freja":
+        return "Freja";
+      case "echo":
+        return "Echo";
       default:
         return "Luna";
     }
@@ -55,7 +60,6 @@ export default function ChatPage() {
     setIsLoading(true);
     setInput("");
 
-    // Optimistiskt UI + spara lokalt
     const next = [...messages, { role: "user", content: text }] as Message[];
     setMessages(next);
     try {
@@ -63,7 +67,6 @@ export default function ChatPage() {
     } catch {}
 
     try {
-      // Anropa mock-API:t (eller riktiga sen)
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -81,7 +84,7 @@ export default function ChatPage() {
       } catch {}
     } catch (e) {
       console.error(e);
-      alert("Chat API error – saknas /api/chat eller fel i route.");
+      alert("Chat API error – kontrollera /api/chat i Vercel-loggarna.");
     } finally {
       setIsLoading(false);
     }
@@ -100,9 +103,10 @@ export default function ChatPage() {
       <header className="sticky top-0 z-10 border-b border-white/10 bg-[#0b0f1a]/80 backdrop-blur supports-[backdrop-filter]:bg-[#0b0f1a]/60">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3">
-            {/* Avatar utan bildfil */}
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-indigo-400 to-fuchsia-500 ring-2 ring-white/20">
-              <span className="text-xs font-bold text-white">L</span>
+              <span className="text-xs font-bold text-white">
+                {headerTitle.charAt(0)}
+              </span>
             </div>
             <div>
               <div className="text-sm font-semibold leading-none">{headerTitle}</div>
@@ -143,7 +147,7 @@ export default function ChatPage() {
           <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 p-2">
             <input
               className="min-w-0 flex-1 bg-transparent px-2 py-2 text-[15px] outline-none placeholder:text-white/50"
-              placeholder={isLoading ? "Skriver..." : "Skriv ett meddelande till Luna..."}
+              placeholder={isLoading ? "Skriver..." : `Skriv ett meddelande till ${headerTitle}...`}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {

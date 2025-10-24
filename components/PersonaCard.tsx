@@ -2,23 +2,29 @@
 "use client";
 
 type Props = {
+  id: string; // "luna" | "freja" | "echo"
   title: string;
   subtitle?: string;
   description?: string;
-  onStart: () => void;
-  onContinue?: () => void;
+  accentFrom?: string; // t.ex. "from-indigo-400"
+  accentTo?: string;   // t.ex. "to-fuchsia-500"
+  onStart: (id: string) => void;
+  onContinue?: (id: string) => void;
   canContinue?: boolean;
 };
 
 export default function PersonaCard({
+  id,
   title,
   subtitle,
   description,
+  accentFrom = "from-indigo-400",
+  accentTo = "to-fuchsia-500",
   onStart,
   onContinue,
   canContinue = false,
 }: Props) {
-  const initial = title?.[0]?.toUpperCase() ?? "L";
+  const initial = title?.[0]?.toUpperCase() ?? "A";
 
   return (
     <div
@@ -27,27 +33,23 @@ export default function PersonaCard({
       aria-label={`${title} persona card`}
     >
       <div className="flex items-center gap-4">
-        {/* Inbyggd avatar (ingen bildfil behövs) */}
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-indigo-400 to-fuchsia-500 ring-2 ring-white/20">
+        {/* Inbyggd avatar */}
+        <div className={`flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br ${accentFrom} ${accentTo} ring-2 ring-white/20`}>
           <span className="text-xl font-bold text-white">{initial}</span>
         </div>
         <div>
           <h3 className="text-xl font-semibold tracking-tight">{title}</h3>
-          {subtitle && (
-            <p className="text-sm text-white/70 leading-tight">{subtitle}</p>
-          )}
+          {subtitle && <p className="text-sm text-white/70 leading-tight">{subtitle}</p>}
         </div>
       </div>
 
-      {description && (
-        <p className="mt-4 text-white/80 leading-relaxed">{description}</p>
-      )}
+      {description && <p className="mt-4 text-white/80 leading-relaxed">{description}</p>}
 
       <div className="mt-6 flex flex-wrap gap-3">
         <button
           className="rounded-xl px-4 py-2 text-sm font-medium shadow-sm transition
                      bg-white text-gray-900 hover:shadow-lg active:scale-[.98]"
-          onClick={onStart}
+          onClick={() => onStart(id)}
         >
           Starta chat
         </button>
@@ -55,7 +57,7 @@ export default function PersonaCard({
         <button
           className="rounded-xl px-4 py-2 text-sm font-medium transition
                      border border-white/20 text-white hover:bg-white/10 disabled:opacity-40"
-          onClick={() => onContinue?.()}
+          onClick={() => onContinue?.(id)}
           disabled={!canContinue}
           aria-disabled={!canContinue}
           title={!canContinue ? "Ingen tidigare konversation hittad" : "Fortsätt chat"}

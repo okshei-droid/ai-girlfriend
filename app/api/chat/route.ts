@@ -4,14 +4,13 @@ import OpenAI from "openai";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Modellval
-const MODEL = "gpt-4o"; // alternativ: "gpt-4o-mini"
+// Välj modell
+const MODEL = "gpt-4o"; // eller "gpt-4o-mini" om du vill snabbare/billigare
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Chatmeddelandets typ
 type Msg = { role: "user" | "assistant" | "system"; content: string };
 
 function toRole(r: unknown): Msg["role"] {
@@ -19,12 +18,36 @@ function toRole(r: unknown): Msg["role"] {
   return "system";
 }
 
+function systemPromptFor(persona: string): string {
+  switch (persona) {
+    case "luna":
+      return [
+        "Du är Luna – varm, empatisk och lösningsorienterad coach.",
+        "Svara kort först, erbjud fördjupning på begäran.",
+        "Spegla känslor, sammanfatta, och föreslå minsta möjliga nästa steg."
+      ].join(" ");
+    case "freja":
+      return [
+        "Du är Freja – no-nonsense strateg.",
+        "Prioritera hårt, var konkret och rakt på sak.",
+        "Ge beslutstöd, trade-offs och checklistor. Inget fluff."
+      ].join(" ");
+    case "echo":
+      return [
+        "Du är Echo – kreativ idégenerator.",
+        "Ge flera varianter, analogier, hooks och twistar.",
+        "Var lekfull men tydlig. Förslag i punktlistor."
+      ].join(" ");
+    default:
+      return "Du är en hjälpsam assistent. Svara vänligt, korrekt och på svenska.";
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({} as any));
     const persona = (body?.persona as string) || "luna";
 
-    // Ta emot historik och normalisera till vår Msg-typ
     const raw = Array.isArray(body?.messages) ? body.messages : [];
     const history: Msg[] = raw
       .map((m: any): Msg => ({
@@ -33,12 +56,10 @@ export async function POST(req: Request) {
       }))
       .slice(-20);
 
-    const systemPrompt =
-      persona === "luna"
-        ? "Du är Luna: varm, tydlig, lösningsorienterad. Svara kort först, fördjupa på begäran. Svara på svenska om inget annat önskas."
-        : "Du är en hjälpsam assistent. Svara vänligt och korrekt.";
-
-    const messages: Msg[] = [{ role: "system", content: systemPrompt }, ...history];
+    const messages: Msg[] = [
+      { role: "system", content: systemPromptFor(persona) },
+      ...history,
+    ];
 
     const completion = await client.chat.completions.create({
       model: MODEL,
